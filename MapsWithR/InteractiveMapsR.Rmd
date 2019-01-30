@@ -15,7 +15,9 @@ output: github_document
 * When should I not use an Interactive Map? 
     * When your map will be viewed in anything other than a web browser. 
     * When you don't need the viewer to be able to pan, zoom, and click on things in the map.
-
+* Common package in R for interative map is mapview. 
+     * This  package has efficient functions to create and visualize the map in html. For detail, refer to:
+     https://cran.r-project.org/web/packages/mapview/readme/README.html
 
 
 This is a Static Map:
