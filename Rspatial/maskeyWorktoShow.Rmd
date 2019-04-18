@@ -1,0 +1,195 @@
+---
+title: "Extracting NDVI time series data from Landsat images via R-spatial Packages"
+authors: "Mahesh L Maskey, Kristen Shapiro, Michelle M Tobias, and Alexander I Mandel"
+date: "April 23, 2019"
+output: 
+  html_document:
+    fig_caption: yes
+    keep_md: yes
+    number_sections: yes
+    toc: yes
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Introduction
+
+## Background
+
+## Why landsat images
+
+## Objectives
+
+- to learn how to deal with remotely sensed images to extract physical quantities like NDVI
+- to visualize rater image and relevant statistics
+- to perform sample raster calculation
+- to extract NDVI time series from deifferent periods of obesevation
+- to visualize spatial dynamics
+
+# Download Landsat Images
+## How to download
+  
+# Loading libraries
+
+```{r, echo = TRUE}
+library(raster)
+library(sp)
+library(rgdal)
+library(ggplot2)
+library(ggpubr)
+```
+
+# Costumized functions
+```{r, echo = TRUE}
+NDVI <- function(X, Y){
+  #X: Near infrared band Image
+  #Y: Red band Image
+  ndvi <- (X-Y)/(X+Y)
+  return(ndvi)
+  
+}
+```
+
+# Example to load a raster
+## Loading multiband raster image
+First we will load our raster file into R and view the data structure.
+```{r, echo = TRUE}
+imageFileName = 'Data/20180126.tif'
+raster1 <- stack(imageFileName)
+raster1
+```
+Since there are multiple bands of, we can check the number or layer with
+```{r, echo = TRUE}
+nlayers(raster1)
+```
+We can view the attributes of each band in the stack in a single output:
+```{r, echo = TRUE}
+raster1@layers
+```
+In both cases, we saw three layers corersponding to blue, green, red and near infrared. In order to calculate NDVI, we need two bands, namley red (third layer) and near infrared (fourth layer). 
+## Getting stacked rasters
+```{r, echo = TRUE}
+redBand<- raster1[[3]]
+NIRBand<- raster1[[4]]
+```
+we can view them as 
+```{r, echo = TRUE}
+redBand
+```
+and
+```{r, echo = TRUE}
+NIRBand
+```
+## Visualizing  raster 
+Let's plot rastar images individually using ggplot 
+```{r, echo=TRUE, width = 8, height =4 }
+redBand.df <- as.data.frame(redBand, xy = TRUE)
+colnames(redBand.df)<-c('x', 'y', 'value')
+plt.red<-ggplot() +
+  geom_raster(data = redBand.df , aes(x = x, y = y, fill = value)) +
+  scale_fill_viridis_c(option = 'plasma') +
+  scale_x_continuous(expand = c(0,0))+
+  scale_y_continuous(expand = c(0,0))+
+  xlab('') + ylab('')+
+  ggtitle('Red band image')+
+  coord_quickmap()+
+  theme_bw()
+
+NIRBand.df <- as.data.frame(NIRBand, xy = TRUE)
+colnames(NIRBand.df)<-c('x', 'y', 'value')
+plt.nir<-ggplot() +
+  geom_raster(data = NIRBand.df , aes(x = x, y = y, fill = value)) +
+  scale_fill_viridis_c(option = 'inferno') +
+  scale_x_continuous(expand = c(0,0))+
+  scale_y_continuous(expand = c(0,0))+
+  xlab('') + ylab('')+
+  coord_quickmap()+
+  ggtitle('Near Infrared band image')+
+theme_bw()
+ggarrange(plt.red, plt.nir)
+```
+
+# NDVI Calculation example
+Let's calculate NDVI
+```{r, echo = TRUE}
+ndvi <- (NIRBand - redBand)/(NIRBand + redBand)
+print(ndvi)
+
+```
+Let's plot rastar for NDVI
+```{r, echo = TRUE}
+ndvi.df <- as.data.frame(ndvi, xy = TRUE)
+colnames(ndvi.df)<-c('x', 'y', 'ndvi')
+plt.NDVI<-ggplot() +
+  geom_raster(data = ndvi.df , aes(x = x, y = y, fill = ndvi)) +
+  scale_fill_viridis_c(option = 'viridis') +
+  scale_x_continuous(expand = c(0,0))+
+  scale_y_continuous(expand = c(0,0))+
+  xlab('') + ylab('')+
+  coord_quickmap()+
+  ggtitle('NDVI for whole image')+
+theme_bw()
+plt.NDVI
+```
+Let’s create a histogram of the NDVI:
+```{r, echo = TRUE}
+ggplot() +
+  geom_histogram(data = ndvi.df, aes(ndvi), fill='green')+
+  xlab('NDVI') + ylab('Frequency')+
+  scale_x_continuous(expand = c(0,0))+
+  scale_y_continuous(expand = c(0,0))+
+  theme_bw()
+
+```
+To calculate the average NDVI for whole raster, NDVI raster needs to convert as data matrix. Such can be done vis `rasterToPoints()` with argument raster as
+```{r, echo = TRUE}
+dataMatrix <- rasterToPoints(ndvi)
+```
+Let's see what the table has 
+```{r, echo = TRUE}
+str(dataMatrix)
+head(dataMatrix)
+```
+Since columns named `x` and `y`  correspond to geo-coordinates, third column is obvisouly NDVI. In order to find the average value of NDVI, third column is used in `mean()` function
+```{r, echo = TRUE}
+NDVI.avg <- mean(dataMatrix[,3])
+print(NDVI.avg)
+```
+
+# Temporal Analysis
+## Loading series of rasters and calculating NDVI
+```{r, echo = TRUE}
+dateList = c('20180126', '20180202', '20180126', '20180202', '20180126', '20180202',
+             '20180126', '20180202', '20180126', '20180202', '20180126', '20180202',
+             '20180126', '20180202', '20180126', '20180202', '20180126', '20180202',
+             '20180126', '20180202', '20180126', '20180202', '20180126', '20180202')
+fileList = paste(dateList, '.tif', sep = '')
+fileList
+nFiles = length(fileList)
+nFiles
+NDVI.ts <- data.frame(id = 1:nFiles)
+for (i in 1:nFiles) {
+  imageFileNameI <- paste('Data/', fileList[i], sep = '')
+  rasterImg <- stack(imageFileNameI)
+  redBand.Indv<- rasterImg[[3]]
+  NIRBand.Indv<- rasterImg[[4]]
+  NDVI.Indv <- NDVI(NIRBand.Indv, redBand.Indv)
+  dataMatrix <- rasterToPoints(NDVI.Indv)
+  NDVI.ts$NDVI[i] <- mean(dataMatrix[,3])
+}
+```
+## Saving into csvFile
+```{r}
+write.csv(NDVI.ts, file = 'testNDVI.csv', row.names = F)
+```
+
+## Loading NDVI time series
+
+## Visualizing temporal dynamics
+
+# Spatial Analysis
+## Croping extent
+## Visualizing spatial dynamics
