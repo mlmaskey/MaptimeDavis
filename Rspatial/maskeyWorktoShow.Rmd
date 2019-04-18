@@ -49,7 +49,48 @@ NDVI <- function(X, Y){
   #Y: Red band Image
   ndvi <- (X-Y)/(X+Y)
   return(ndvi)
-  
+}
+
+ggrasterPlot <- function(imgRaster, valueStr, titleStr){
+  imgRaster.df <- as.data.frame(imgRaster, xy = TRUE)
+  colnames(imgRaster.df)<-c('x', 'y', valueStr)
+  pltRaster<-ggplot() +
+    geom_raster(data = imgRaster.df , aes(x = x, y = y, fill = valueStr)) +
+    scale_fill_viridis_c(option = 'inferno') +
+    scale_x_continuous(expand = c(0,0))+
+    scale_y_continuous(expand = c(0,0))+
+    xlab('') + ylab('')+
+    coord_quickmap()+
+    ggtitle(titleStr)+
+  theme_bw()
+  return(pltRaster)
+}
+
+ggrasterHist<- function(imgRaster, valueStr){
+  imgRaster.df <- as.data.frame(imgRaster, xy = TRUE)
+  colnames(imgRaster.df)<-c('x', 'y', valueStr)
+  pltHist<-ggplot() +
+    geom_histogram(data = imgRaster.df, aes(ndvi), fill='green')+
+    xlab('NDVI') + ylab('Frequency')+
+    scale_x_continuous(expand = c(0,0))+
+    scale_y_continuous(expand = c(0,0))+
+    theme_bw()
+  return(pltHist)
+}
+
+getcropArea<-function(X1,X2, Y1, Y2){
+  rectangle.df = data.frame(matrix(NaN, nrow = 5, ncol = 2))
+  colnames(rectangle.df) = c('x', 'y')
+  rectangle.df$x[c(1,4,5)] = X1
+  rectangle.df$x[c(2,3)] = X2
+  rectangle.df$y[c(1,2,5)] = Y1
+  rectangle.df$y[c(3,4)] = Y2
+  return(rectangle.df)
+}
+
+meanNDVI<- function(rasterNDVI){
+  dataMatrix <- rasterToPoints(rasterNDVI)
+  return(mean(dataMatrix[,3], na.rm = TRUE))
 }
 ```
 
@@ -142,7 +183,6 @@ ggplot() +
   scale_x_continuous(expand = c(0,0))+
   scale_y_continuous(expand = c(0,0))+
   theme_bw()
-
 ```
 To calculate the average NDVI for whole raster, NDVI raster needs to convert as data matrix. Such can be done vis `rasterToPoints()` with argument raster as
 ```{r, echo = TRUE}
@@ -191,5 +231,144 @@ write.csv(NDVI.ts, file = 'testNDVI.csv', row.names = F)
 ## Visualizing temporal dynamics
 
 # Spatial Analysis
+## Information about location
+```{r, echo = TRUE}
+dataMatrix <- rasterToPoints(ndvi)
+xcoord = dataMatrix[,1]
+ycoord = dataMatrix[,2]
+maxX <- max(dataMatrix[,1])
+maxY <- max(dataMatrix[,2])
+minX <- min(dataMatrix[,1])
+minY <- min(dataMatrix[,2])
+```
+
 ## Croping extent
+Let's define corner of left bottom half of the image
+```{r, echo = TRUE}
+midX = (minX+maxX)/2
+midY = (minY+maxY)/2
+cropArea1 <- getcropArea(minX, midX,minY, midY)
+cropArea2 <- getcropArea(midX, maxX,minY, midY)
+cropArea3 <- getcropArea(minX, midX,midY, maxY)
+cropArea4 <- getcropArea(midX, maxX,midY, maxY)
+crop_extent1 = extent(minX, midX, minY, midY)
+crop_extent2 <- extent(midX, maxX,minY, midY)
+crop_extent3 <- extent(minX, midX,midY, maxY)
+crop_extent4 <- extent(midX, maxX,midY, maxY)
+```
+Superimpose crop area boundary over the image
+```{r, echo = TRUE}
+ndvi.df <- as.data.frame(ndvi, xy = TRUE)
+colnames(ndvi.df)<-c('x', 'y', 'ndvi')
+plt.NDVI<-ggplot() +
+  geom_raster(data = ndvi.df , aes(x = x, y = y, fill = ndvi)) +
+  geom_rect(data=cropArea1, mapping=aes(xmin=minX, xmax=midX, 
+                                           ymin=minY, ymax=midY),
+            color="black", alpha=0) +
+  geom_rect(data=cropArea2, mapping=aes(xmin=midX, xmax=maxX, 
+                                           ymin=minY, ymax=midY),
+            color="black", alpha=0) +
+  geom_rect(data=cropArea3, mapping=aes(xmin=minX, xmax=midX, 
+                                           ymin=midY, ymax=maxY),
+            color="black", alpha=0) +
+  geom_rect(data=cropArea4, mapping=aes(xmin=midX, xmax=maxX, 
+                                           ymin=midY, ymax=maxY),
+            color="black", alpha=0) +
+  scale_fill_viridis_c(option = 'viridis') +
+  scale_x_continuous(expand = c(0,0))+
+  scale_y_continuous(expand = c(0,0))+
+  xlab('') + ylab('')+
+  coord_quickmap()+
+  ggtitle('NDVI for whole image')+
+theme_bw()
+plt.NDVI
+
+```
+```{r, echo = TRUE}
+imgCrop1 <- crop(ndvi, crop_extent1)
+meanNDVI1 = meanNDVI(imgCrop1)
+print(meanNDVI1)
+imgCrop2 <- crop(ndvi, crop_extent2)
+meanNDVI2 = meanNDVI(imgCrop2)
+print(meanNDVI2)
+imgCrop3 <- crop(ndvi, crop_extent3)
+meanNDVI3 = meanNDVI(imgCrop3)
+print(meanNDVI3)
+imgCrop4 <- crop(ndvi, crop_extent4)
+meanNDVI4 = meanNDVI(imgCrop4)
+print(meanNDVI4)
+```
+
 ## Visualizing spatial dynamics
+```{r, echo = TRUE}
+# Entire
+pltall<-ggplot() +
+  geom_histogram(data = ndvi.df, aes(ndvi), fill='green')+
+  xlab('NDVI') + ylab('Frequency')+
+  scale_x_continuous(expand = c(0,0))+
+  xlim(0.3, 0.7)+
+  scale_y_continuous(expand = c(0,0))+
+  theme_bw()
+pltall+ggtitle('Entire')
+```
+NDVI Histogram for entire area
+Let's have seperate ggplots for individual sections
+```{r, echo = TRUE}
+# bottom left
+# plt.corner1<-ggrasterHist(imgCrop1, 'NDVI')
+imgCrop1.df <- as.data.frame(imgCrop1, xy = TRUE)
+colnames(imgCrop1.df)<-c('x', 'y', 'ndvi')
+plt.corner1<-ggplot() +
+  geom_histogram(data = imgCrop1.df, aes(ndvi), fill='green')+
+  xlab('NDVI') + ylab('Frequency')+
+  scale_x_continuous(expand = c(0,0))+
+  xlim(0.3, 0.7)+
+  scale_y_continuous(expand = c(0,0))+
+  theme_bw()
+```
+```{r, echo = TRUE}
+#  bottom right
+imgCrop2.df <- as.data.frame(imgCrop2, xy = TRUE)
+colnames(imgCrop2.df)<-c('x', 'y', 'ndvi')
+plt.corner2<-ggplot() +
+  geom_histogram(data = imgCrop2.df, aes(ndvi), fill='green')+
+  xlab('NDVI') + ylab('Frequency')+
+  scale_x_continuous(expand = c(0,0))+
+  xlim(0.3, 0.7)+
+  scale_y_continuous(expand = c(0,0))+
+  theme_bw()
+```
+```{r, echo = TRUE}
+# # top left
+imgCrop3.df <- as.data.frame(imgCrop3, xy = TRUE)
+colnames(imgCrop3.df)<-c('x', 'y', 'ndvi')
+plt.corner3<-ggplot() +
+  geom_histogram(data = imgCrop3.df, aes(ndvi), fill='green')+
+  xlab('NDVI') + ylab('Frequency')+
+  scale_x_continuous(expand = c(0,0))+
+  xlim(0.3, 0.7)+
+  scale_y_continuous(expand = c(0,0))+
+  theme_bw()
+```
+```{r, echo = TRUE}
+#  top right
+imgCrop4.df <- as.data.frame(imgCrop4, xy = TRUE)
+colnames(imgCrop4.df)<-c('x', 'y', 'ndvi')
+plt.corner4<-ggplot() +
+  geom_histogram(data = imgCrop4.df, aes(ndvi), fill='green')+
+  xlab('NDVI') + ylab('Frequency')+
+  scale_x_continuous(expand = c(0,0))+
+  xlim(0.3, 0.7)+
+  scale_y_continuous(expand = c(0,0))+
+  theme_bw()
+```
+Now, combine them using `ggarrange` as 
+```{r, echo = TRUE}
+ggarrange(plt.corner3+ggtitle('Top Left')+geom_vline(xintercept = meanNDVI3),
+          plt.corner4+ggtitle('Top Right')+geom_vline(xintercept = meanNDVI4),
+          plt.corner1+ggtitle('Bottom Left')+geom_vline(xintercept = meanNDVI1),
+          plt.corner2+ggtitle('Bottom Right')+geom_vline(xintercept = meanNDVI2),
+          nrow = 2, ncol = 2)
+```
+
+
